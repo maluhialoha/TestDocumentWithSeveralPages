@@ -1,0 +1,37 @@
+CREATE TABLE DocumentProduct (
+  id INTEGER PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  page INTEGER NOT NULL
+);
+
+INSERT INTO DocumentProduct (id, name, page)
+VALUES (1, 'Carottes', 1),
+(2, 'Tomates', 1);
+
+getProduct:
+SELECT *
+FROM DocumentProduct
+WHERE id = :id;
+
+getAllProducts:
+SELECT *
+FROM DocumentProduct;
+
+saveProduct:
+INSERT
+INTO DocumentProduct (id, name, page)
+VALUES (?, ?, ?);
+
+updateProduct:
+UPDATE DocumentProduct
+SET name = :name,
+    page = :page
+WHERE
+    id = :document_product_id;
+
+deleteProduct:
+DELETE FROM DocumentProduct
+WHERE id = :id;
+
+lastInsertRowId:
+SELECT last_insert_rowid();
