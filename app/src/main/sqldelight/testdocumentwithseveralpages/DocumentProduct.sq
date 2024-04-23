@@ -29,6 +29,12 @@ SET name = :name,
 WHERE
     id = :document_product_id;
 
+updateLastProduct:
+UPDATE DocumentProduct
+SET    page = page + 1
+WHERE
+        id = last_insert_rowid();
+
 deleteProduct:
 DELETE FROM DocumentProduct
 WHERE id = :id;

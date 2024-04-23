@@ -21,13 +21,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -52,20 +49,25 @@ fun MainCompose() {
             val myViewModel: MyViewModel = hiltViewModel()
             var products = myViewModel.uiState
                 .collectAsStateWithLifecycle()
+            var numberOfPages = products.value.products.last().page
 
             println("xxxx = " + myViewModel.uiState)
             MainScreen(
+                numberOfPages = numberOfPages,
                 products.value.products,
+                onIncrementPages = {
+                    numberOfPages++
+                },
                 onAddValue = {
                     myViewModel.addProduct(
                         DocumentProductState(
                             id = null,
                             name = "another",
-                            page = products.value.products.last().page
+                            page = numberOfPages
                         )
                     )
                 },
-                savePageNumbersInDatabase = {}
+                updateItemPage = { myViewModel.updateLastItemPage() }
             )
         }
     }
@@ -73,16 +75,20 @@ fun MainCompose() {
 
 @Composable
 fun MainScreen(
+    numberOfPages: Int,
     uiState: List<DocumentProductState>,
     onAddValue: () -> Unit,
-    savePageNumbersInDatabase: () -> Unit,
+    onIncrementPages: () -> Unit,
+    updateItemPage: () -> Unit,
 ) {
     println("uiState = " + uiState)
 
     Column {
         Pager(
-            uiState = uiState,
-            savePageNumbersInDatabase = savePageNumbersInDatabase
+            numberOfPages = numberOfPages,
+            incrementPages = onIncrementPages,
+            products = uiState,
+            updatePageNumberInDatabase = updateItemPage
         )
         Spacer(Modifier.padding(42.dp))
 
@@ -93,18 +99,16 @@ fun MainScreen(
 }
 
 fun calculateNumberOfPages(
-    pagesContentHeight: SnapshotStateList<PageContentHeight>,
+    pageContentHeight: Dp,
     availableSpace: Dp,
-    numberOfPages: Int,
 ): Int {
-    val totalContentHeight = pagesContentHeight.map { it.height.value }.sum()
-    println("totalContentHeight" + totalContentHeight)
+    println("totalContentHeight" + pageContentHeight)
     println("availableSpace" + availableSpace)
 
-    val quotient = (totalContentHeight / availableSpace.value).toInt()
+    val quotient = (pageContentHeight.value / availableSpace.value).toInt()
     println("quotient" + quotient)
 
-    val remainder = totalContentHeight % availableSpace.value
+    val remainder = (pageContentHeight.value % availableSpace.value)
     println("remainder" + remainder)
 
     return if (remainder == 0F) quotient else quotient + 1
@@ -113,18 +117,16 @@ fun calculateNumberOfPages(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Pager(
-    uiState: List<DocumentProductState>,
-    savePageNumbersInDatabase: () -> Unit,
+    numberOfPages: Int,
+    incrementPages: () -> Unit,
+    products: List<DocumentProductState>,
+    updatePageNumberInDatabase: () -> Unit,
 ) {
-    var numberOfPages by remember { mutableStateOf(1) }
     val pagerState = rememberPagerState { numberOfPages }
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
-    var productArray by mutableStateOf(uiState.map {
-        ProductWithHeight(it)
-    })
 
-    val pagesContentHeight = remember { mutableStateListOf<PageContentHeight>() }
+    var pageContentHeight = remember { 0.dp }
 
     Column {
         HorizontalPager(
@@ -133,119 +135,39 @@ fun Pager(
             println("index = " + pagerIndex)
 
             Column {
-                /*      Text("page n°" + (pagerIndex + 1) + "/" + numberOfPages)
-                      Text("triggerRecompose°" + (triggerRecompose + 1) )*/
+                Text("page n°" + (pagerIndex + 1) + "/" + numberOfPages)
 
                 TemplateContent(
                     screenWidth = screenWidth,
-                    productArray = productArray.filter { it.documentProduct.page == (pagerIndex + 1) },
+                    productArray = products.filter { it.page == (pagerIndex + 1) },
                     //footerArray = ,
                     index = pagerIndex,
                     numberOfPages = numberOfPages,
-                    onPageOverflow = { availableSpace, availableSpaceForDataTable ->
+                    onPageOverflow = {
                         println("!!!!!!!!!!!!!!!!onpage overfloww")
-
-                        numberOfPages = calculateNumberOfPages(
-                            pagesContentHeight,
-                            availableSpace,
-                            numberOfPages
-
-                        )
+                        incrementPages()
                         println("numberOfPages" + numberOfPages)
+                        products.last().page += 1
+                        println("!!!! lastproduct page = " + products.last())
+                        updatePageNumberInDatabase()
 
-                        val limitIndexArray = mutableListOf(0)
-
-                        println("productArray = " + productArray)
-
-                        var indexOfTheFirstRowOnNextPage = 0
-
-
-                        for (i in 0..(numberOfPages - 2)) {
-                            val productsHeights = productArray.map { it.height.value }
-                                .toMutableList() // ex: [1.6, 1.6, 2.4]
-                            println("productsHeights = " + productsHeights)
-
-                            /*val array =
-                                productsHeights.slice(limitIndexArray.last()..productsHeights.lastIndex)
-                            println("array = " + array)*/
-
-                            val acc =
-                                productsHeights.scan(0F) { acc, height -> acc + height }.drop(1)
-                                    .toMutableList()
-
-                            println("acc = " + acc)
-
-                            println("availableSpaceForDataTable" + (availableSpaceForDataTable.value))
-
-                            val limitHeight =
-                                acc.lastOrNull() { it < availableSpaceForDataTable.value }
-                            println("limitHeight = " + limitHeight)
-                            indexOfTheFirstRowOnNextPage = acc.indexOf(limitHeight) + 1
-                            println("indexOfTheFirstRowOnNextPage = " + indexOfTheFirstRowOnNextPage)
-
-                            val idsOfProductToMoveToNextPage = productArray
-                                .slice(indexOfTheFirstRowOnNextPage..productArray.lastIndex)
-                                .map { it.documentProduct.id }
-
-                            /* productArray = productArray.map { product ->
-                               if (product.documentProduct.id in idsOfProductToMoveToNextPage) {
-                                    product.copy(this = DocumentProductState(null, "k,", 1))
-                                } else product
-                            }*/
-
-                            savePageNumbersInDatabase()
-
-                            println("productArray = " + productArray)
-                        }
-                    },
-                    onContentHeightCalculated = { height, pagerIndex ->
-                        val heightsArrayIndex =
-                            pagesContentHeight.indexOfFirst { it.pageNumber == pagerIndex + 1 }
-
-                        if (heightsArrayIndex >= 0) {
-                            pagesContentHeight[heightsArrayIndex].height = height
-                        } else pagesContentHeight.add(
-                            PageContentHeight(height, pagerIndex + 1)
-                        )
-                        println("pagesContentHeight1 =" + pagesContentHeight.toList())
-                    },
-                    onDataTableRowHeightCalculated = { height, product ->
-                        println("onDataTableRowHeightCalculated productsHeight" + height + product)
-                        println("productArray" + productArray)
-                        productArray.first { it.documentProduct.id == product?.id }?.height =
-                            height
-                        println("productArray" + productArray)
-
-                    },
-                    onFooterRowHeightCalculated = { height, product ->
-                        println("")
-                        /*  footerArray.filter { it.rowName == product }.map {
-                              it.height = height
-                          }*/
-                    },
+                    }
                 )
             }
         }
     }
 }
 
-data class ProductWithHeight(
-    var documentProduct: DocumentProductState,
-    var height: Dp = 0.dp,
-)
-
 @Composable
 fun TemplateContent(
     screenWidth: Dp,
-    productArray: List<ProductWithHeight>?,
+    productArray: List<DocumentProductState>?,
     // footerArray: List<FooterRow>,
     index: Int,
     numberOfPages: Int,
-    onPageOverflow: (Dp, Dp) -> Unit,
-    onContentHeightCalculated: (Dp, Int) -> Unit,
-    onDataTableRowHeightCalculated: (Dp, DocumentProductState?) -> Unit,
-    onFooterRowHeightCalculated: (Dp, FooterRowName) -> Unit,
-) {
+    onPageOverflow: () -> Unit,
+
+    ) {
     println("_______IN CONTENT-- = " + index)
     println("index = " + index)
     println("productArray = " + productArray?.toList())
@@ -294,7 +216,6 @@ fun TemplateContent(
 
                 .onGloballyPositioned { coordinates ->
                     pageContentHeight = with(localDensity) { coordinates.size.height.toDp() }
-                    onContentHeightCalculated(pageContentHeight, index)
                     println("pageContentHeight = " + pageContentHeight)
                 }
         ) {
@@ -307,7 +228,7 @@ fun TemplateContent(
             println("------overflowingHeight = " + overflowingHeight)
 
             if (pageContentHeight != 0.dp && (overflowingHeight > 0.dp)) {
-                onPageOverflow(availableSpace, availableSpace - pageHeaderHeight)
+                onPageOverflow()
                 pageContentHeight = 0.dp
             }
 
@@ -319,8 +240,6 @@ fun TemplateContent(
                         println("PAGE HEAD = " + pageHeaderHeight)
 
                     }) {
-
-
                 if (index == 0) {
                     Text(
                         fontSize = 60.sp,
@@ -339,7 +258,7 @@ fun TemplateContent(
                     //.background(Color.Black)
                     .fillMaxWidth()
             ) {
-                productArray?.map { it.documentProduct }?.forEach { product ->
+                productArray?.forEach { product ->
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -351,16 +270,7 @@ fun TemplateContent(
                             modifier = Modifier
                                 .padding(start = 2.dp, end = 4.dp, top = paddingTop)
                                 .fillMaxHeight()
-                                .onGloballyPositioned { coordinates ->
-                                    onDataTableRowHeightCalculated.let {
-                                        it(
-                                            with(localDensity) { coordinates.size.height.toDp() + paddingTop },
-                                            product
-                                        )
-                                    }
-                                }
                         ) {
-
                             Text(
                                 text = product.id.toString() + " " + product.name + " page =" + product.page,
                             )

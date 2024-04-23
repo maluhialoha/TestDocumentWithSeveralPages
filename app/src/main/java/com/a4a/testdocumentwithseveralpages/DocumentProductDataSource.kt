@@ -39,6 +39,15 @@ class DocumentProductDataSource(
             }
         }
     }
+
+    suspend fun updateLastItemPage() {
+        return withContext(Dispatchers.IO) {
+            try {
+                documentProductQueries.updateLastProduct()
+            } catch (cause: Throwable) {
+            }
+        }
+    }
 }
 
 fun DocumentProduct.transformIntoEditableDocumentProduct(): DocumentProductState {

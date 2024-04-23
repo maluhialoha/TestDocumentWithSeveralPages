@@ -21,6 +21,7 @@ class MyViewModel @Inject constructor(
 ) : ViewModel() {
     private var fetchJob: Job? = null
     private var saveJob: Job? = null
+    private var updateJob: Job? = null
 
 /*    private val _uiState = mutableStateOf(DeliveryNote(
         deliveryNoteId = 1,
@@ -57,9 +58,21 @@ class MyViewModel @Inject constructor(
             try {
                 productDataSource.saveProduct(product)
             } catch (e: Exception) {
-                println("Fetching products failed with exception: ${e.localizedMessage}")
+                println("Saving products failed with exception: ${e.localizedMessage}")
             }
         }
     }
+
+    fun updateLastItemPage() {
+        updateJob?.cancel()
+        updateJob = viewModelScope.launch {
+            try {
+                productDataSource.updateLastItemPage()
+            } catch (e: Exception) {
+                println("Updating products failed with exception: ${e.localizedMessage}")
+            }
+        }
+    }
+
 
 }
